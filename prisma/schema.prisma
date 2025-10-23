@@ -1,0 +1,32 @@
+datasource db {
+  provider = "postgresql" // or mysql/sqlite
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+model User {
+  id        String  @id @default(cuid())  // unique user ID
+  provider  String  // login provider: 'github' | 'google'
+}
+
+
+model Resume {
+  id        String  @id @default(cuid()) // unique resume ID
+  content   String  // resume content
+  userId    String  @unique               // foreign key linking to User (unique for one-to-one)
+  user      User    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+
+model AIResponse {
+  id        String  @id @default(cuid()) // unique AI response ID
+  resumeId  String  // foreign key linking to Resume
+  resume    Resume  @relation(fields: [resumeId], references: [id])
+  content   String  // AI response content
+  createdAt DateTime @default(now())
+}
