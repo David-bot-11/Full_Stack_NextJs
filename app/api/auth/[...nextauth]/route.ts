@@ -3,18 +3,15 @@ import NextAuth from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
 import GoogleProvider from "next-auth/providers/google";
 
-export default NextAuth({
+const handler =  NextAuth({
   providers: [
     GitHubProvider({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
+      clientId: process.env.GITHUB_ID as string,
+      clientSecret: process.env.GITHUB_SECRET as string,
     }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
+    
   ],
-   secret: process.env.NEXTAUTH_SECRET,
+   secret: process.env.NEXTAUTH_SECRET as string,
 
   session: {
     strategy: "jwt", 
@@ -40,5 +37,8 @@ export default NextAuth({
     },
   },
 });
+
+
+export { handler as GET, handler as POST };
 
 

@@ -21,31 +21,20 @@ export default function Home() {
             Login To Your Account
           </h1>
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            To Analyse Your Resume Using AI, Get Started By Exploring Our Website and Our Amazing State Of the Art{" "}
-            <span className="font-medium text-zinc-950 dark:text-zinc-50">AI Model</span>
+            To Analyse Your Resume Using AI, Get Started By Exploring Our Website and Our Amazing State Of the Art AI Model{" "}
           </p>
 
-          <h3 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            You Can Login Using
-          </h3>
+          
         </div>
 
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
           {/* GitHub Login */}
          <button
             onClick={() => signIn("github")}
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
           >
-            GitHub
-          </button>
-
-          {/* Google Login */}
-          <button
-            onClick={() => signIn("google")}
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-          >
-            Google
-          </button>
+            Login
+          </button>        
         </div>
       </main>
     </div>

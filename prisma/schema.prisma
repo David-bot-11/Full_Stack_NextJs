@@ -27,6 +27,6 @@ model AIResponse {
   id        String  @id @default(cuid()) // unique AI response ID
   resumeId  String  // foreign key linking to Resume
   resume    Resume  @relation(fields: [resumeId], references: [id])
-  content   String  // AI response content
+  contentfromai   String  // AI response content
   createdAt DateTime @default(now())
 }

@@ -1,6 +1,4 @@
 import { PDFParse } from "pdf-parse";
-
-
 import fs from 'fs';
 import mammoth from "mammoth";
 
