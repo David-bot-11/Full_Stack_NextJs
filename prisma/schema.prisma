@@ -1,12 +1,18 @@
-datasource db {
-  provider = "postgresql" // or mysql/sqlite
-  url      = env("DATABASE_URL")
-}
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 model User {
   id        String  @id @default(cuid())  // unique user ID
@@ -30,3 +36,6 @@ model AIResponse {
   contentfromai   String  // AI response content
   createdAt DateTime @default(now())
 }
+
+
+
