@@ -1,115 +1,64 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import multer from "multer";
-import { extractText } from "@/lib/utils/extractText";
 import fs from "fs";
-import { authOptions } from "../auth/[...nextauth]/route";
 
+import path from "path";
+import { extractText } from "@/lib/utils/extractText";
 
-const upload = multer({ dest: "/tmp/uploads" });
+const upload = multer({ dest: "/tmp/upload" });
 
-// Multer middleware wrapper for Next.js (since App Router doesn’t support middleware directly)
 function runMiddleware(req: any, fn: any) {
   return new Promise((resolve, reject) => {
     fn(req, {} as any, (result: any) => {
-      if (result instanceof Error) return reject(result);
-      return resolve(result);
+      if (result instanceof Error) reject(result);
+      else resolve(result);
     });
   });
 }
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
+export async function POST(req: any) {
+  await runMiddleware(req, upload.single("resume"));
+  const file = req.file;
 
-  if (!session || !session.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const reqWithFile: any = req;
-  await runMiddleware(reqWithFile, upload.single("resume"));
-
-  const file = reqWithFile.file;
   if (!file) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
 
-  const filePath = file.path;
-  const fileName = file.originalname;
-
   try {
-    // Extract resume text
-    const text = await extractText(filePath, fileName);
+    // Extract text
+    const text =  await extractText(file.path, file.originalname);
+    fs.unlinkSync(file.path); // clean up temp file
 
-    // Save resume content in Prisma
-    const resume = await prisma.resume.create({
-      data: {
-        content: text,
-        userId: session.user.id,
-      },
-    });
-
-  
-    const aiResponse = await fetch(process.env.AI_API_URL!, {
+    // Send to OpenRouter
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.AI_API_KEY}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({
+        model: "deepseek/deepseek-chat-v3.1:free",
+        messages: [
+          {
+            role: "user",
+            content: `Analyze the following resume text and provide a structured JSON with:
+            - Experience summary
+            - Top skills
+            - Recommended career domains
+            Resume text: ${text.slice(0, 15000)}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
     });
 
-    const aiData = await aiResponse.json();
+    const data = await response.json();
+    const aiText = data?.choices?.[0]?.message?.content ?? "{}";
+    const aiJson = JSON.parse(aiText);
 
-    // Save AI response
-    await prisma.aIResponse.create({
-      data: {
-        resumeId: resume.id,
-        contentfromai: JSON.stringify(aiData),
-      },
-    });
-
-    // Cleanup file
-    fs.unlinkSync(filePath);
-
-    return NextResponse.json({ message: "Resume processed", aiData });
+    return NextResponse.json(aiJson);
   } catch (err: any) {
-    console.error("Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-
-    let file = files.resume || Object.values(files)[0];
-    if (Array.isArray(file)) file = file[0];
-
-    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-
-    // 🧠 Use your shared utility
-    const text = await extractText(file.filePath,file.filename);
-
-    // Find the user from session
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    try {
-    const resume = await prisma.resume.create({
-      data: {
-        content: text,
-        userId: user.id,
-      },
-    });
-
-    return NextResponse.json({
-      message: "Resume uploaded and text extracted successfully",
-      resume,
-    });
-  } catch (err: any) {
-    console.error("Error uploading resume:", err);
+    console.error("Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
