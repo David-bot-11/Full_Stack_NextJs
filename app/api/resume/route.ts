@@ -1,64 +1,132 @@
-import { NextResponse } from "next/server";
-import multer from "multer";
-import fs from "fs";
-
+import { NextRequest, NextResponse } from "next/server";
+import { promises as fs } from "fs";
+import { v4 as uuidv4 } from "uuid";
+import PDFParser from "pdf2json";
+import os from "os";
 import path from "path";
-import { extractText } from "@/lib/utils/extractText";
 
-const upload = multer({ dest: "/tmp/upload" });
-
-function runMiddleware(req: any, fn: any) {
-  return new Promise((resolve, reject) => {
-    fn(req, {} as any, (result: any) => {
-      if (result instanceof Error) reject(result);
-      else resolve(result);
-    });
-  });
-}
-
-export async function POST(req: any) {
-  await runMiddleware(req, upload.single("resume"));
-  const file = req.file;
-
-  if (!file) {
-    return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-  }
-
+export async function POST(req: NextRequest) {
   try {
-    // Extract text
-    const text =  await extractText(file.path, file.originalname);
-    fs.unlinkSync(file.path); // clean up temp file
+    
+    const formData = await req.formData();
+    const uploadedFile = formData.get("resume");
 
-    // Send to OpenRouter
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat-v3.1:free",
-        messages: [
-          {
-            role: "user",
-            content: `Analyze the following resume text and provide a structured JSON with:
-            - Experience summary
-            - Top skills
-            - Recommended career domains
-            Resume text: ${text.slice(0, 15000)}`,
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
+    if (!(uploadedFile instanceof File)) {
+      return NextResponse.json(
+        { error: "No valid file uploaded" },
+        { status: 400 }
+      );
+    }
+
+    
+    const fileId = uuidv4();
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, `${fileId}_${uploadedFile.name}`);
+
+    
+    const fileBuffer = Buffer.from(await uploadedFile.arrayBuffer());
+    await fs.writeFile(tempFilePath, fileBuffer);
+
+   
+    const pdfParser = new (PDFParser as any)(null, 1);
+
+    const parsedText: string = await new Promise((resolve, reject) => {
+      pdfParser.on("pdfParser_dataError", (err: any) =>
+        reject(err.parserError)
+      );
+      pdfParser.on("pdfParser_dataReady", () =>
+        resolve(pdfParser.getRawTextContent())
+      );
+      pdfParser.loadPDF(tempFilePath);
     });
 
-    const data = await response.json();
-    const aiText = data?.choices?.[0]?.message?.content ?? "{}";
-    const aiJson = JSON.parse(aiText);
+    
+    await fs.unlink(tempFilePath).catch(() => {});
 
-    return NextResponse.json(aiJson);
+    if (!parsedText || parsedText.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Failed to extract text from PDF." },
+        { status: 400 }
+      );
+    }
+
+    
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing AI API key. Set OPENROUTER_API_KEY in .env." },
+        { status: 500 }
+      );
+    }
+
+    const limitedText = parsedText.slice(0, 15000);
+
+    const aiResponse = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "mistralai/mistral-7b-instruct:free",
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert career coach. Analyze resumes and return structured JSON.",
+            },
+            {
+              role: "user",
+              content: `Analyze this resume and return JSON with the following:
+              {
+                "ExperienceSummary": "",
+                "TopSkills": [],
+                "RecommendedCareerDomains": [],
+                "LearningSuggestions": []
+              }
+              Resume text: ${limitedText}`,
+            },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      }
+    );
+
+    // 5️⃣ Handle AI response
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error("AI API Error:", errorText);
+      return NextResponse.json(
+        { error: "AI request failed", details: errorText },
+        { status: aiResponse.status }
+      );
+    }
+
+    const data = await aiResponse.json();
+    const aiText = data?.choices?.[0]?.message?.content ?? "{}";
+
+    let aiJson;
+    try {
+      aiJson = JSON.parse(aiText);
+    } catch {
+      aiJson = { rawResponse: aiText };
+    }
+
+    // 6️⃣ Return the AI analysis
+    return NextResponse.json(
+      {
+        message: "Resume analyzed successfully",
+        aiResponse: aiJson,
+      },
+      { status: 200 }
+    );
   } catch (err: any) {
-    console.error("Error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Resume analysis error:", err.message);
+    return NextResponse.json(
+      { error: err.message || "Unexpected server error" },
+      { status: 500 }
+    );
   }
 }
